@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  GITHUB
+}
+
+enum ConversionStatus {
+  SUCCESS
+  FAILED
+}
+
+model User {
+  id           Int                @id @default(autoincrement())
+  email        String             @unique
+  passwordHash String?
+  provider     AuthProvider       @default(LOCAL)
+  providerId   String?
+  createdAt    DateTime           @default(now())
+  conversions  ConversionHistory[]
+}
+
+model ConversionHistory {
+  id               Int               @id @default(autoincrement())
+  userId           Int
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originalFilename String
+  sourceFormat     String
+  targetFormat     String
+  fileSizeBytes    Int
+  status           ConversionStatus
+  errorMessage     String?
+  createdAt        DateTime          @default(now())
+
+  @@index([userId])
+}

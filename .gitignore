@@ -1,0 +1,15 @@
+node_modules/
+.env
+*.log
+
+# backend
+backend/dist/
+backend/logs/*.log
+backend/storage/uploads/*
+backend/storage/converted/*
+!backend/storage/uploads/.gitkeep
+!backend/storage/converted/.gitkeep
+
+# frontend
+frontend/.next/
+frontend/out/

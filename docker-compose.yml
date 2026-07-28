@@ -1,0 +1,66 @@
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-root-password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-chameleon}
+      MYSQL_USER: ${MYSQL_USER:-chameleon}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me-user-password}
+    ports:
+      - '${MYSQL_PORT:-3306}:3306'
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-u', 'root', '-p${MYSQL_ROOT_PASSWORD:-change-me-root-password}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: mysql://${MYSQL_USER:-chameleon}:${MYSQL_PASSWORD:-change-me-user-password}@mysql:3306/${MYSQL_DATABASE:-chameleon}
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-string}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-25}
+      MAX_BATCH_FILES: ${MAX_BATCH_FILES:-20}
+      RETENTION_MINUTES: ${RETENTION_MINUTES:-60}
+      CLEANUP_INTERVAL_MINUTES: ${CLEANUP_INTERVAL_MINUTES:-15}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+      ENABLE_GOOGLE_OAUTH: ${ENABLE_GOOGLE_OAUTH:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      ENABLE_GITHUB_OAUTH: ${ENABLE_GITHUB_OAUTH:-false}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+    ports:
+      - '${BACKEND_PORT:-4000}:4000'
+    volumes:
+      - backend-storage:/app/storage
+      - backend-logs:/app/logs
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - '${FRONTEND_PORT:-3000}:3000'
+
+volumes:
+  mysql-data:
+  backend-storage:
+  backend-logs:

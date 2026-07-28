@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+logs/*.log
+storage/uploads/*
+storage/converted/*
+!storage/uploads/.gitkeep
+!storage/converted/.gitkeep
+coverage/
+backend/tests/tmp/
