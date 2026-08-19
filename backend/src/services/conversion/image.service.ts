@@ -1,6 +1,6 @@
 import sharp from 'sharp';
-import { CorruptFileError } from '../../utils/errors';
-import { ImageFormat } from '../../utils/formats';
+import { CorruptFileError, ValidationError } from '../../utils/errors';
+import { ImageFormat, isLossyQualityFormat } from '../../utils/formats';
 
 export const MAX_RESIZE_DIMENSION = 8000;
 
@@ -14,6 +14,7 @@ export interface ImageConvertOptions {
   quality?: number; // 1-100, applies to lossy formats
   keepMetadata?: boolean;
   resize?: ResizeOptions;
+  maxSizeBytes?: number; // compress to fit under this size; see compressToTargetSize
 }
 
 function applyResize(pipeline: sharp.Sharp, resize?: ResizeOptions): sharp.Sharp {
@@ -56,6 +57,10 @@ export async function convertImage(
   targetFormat: ImageFormat,
   options: ImageConvertOptions = {}
 ): Promise<Buffer> {
+  if (options.maxSizeBytes) {
+    return compressToTargetSize(input, targetFormat, options.maxSizeBytes, options);
+  }
+
   try {
     // sharp strips EXIF/metadata on output by default; only re-attach it
     // when the caller explicitly opts in via keepMetadata.
@@ -90,6 +95,85 @@ export async function convertImage(
   } catch (err) {
     if (err instanceof CorruptFileError) throw err;
     throw new CorruptFileError('Unable to process image — the file may be corrupt or malformed');
+  }
+}
+
+type LossyQualityFormat = 'jpg' | 'jpeg' | 'webp' | 'avif';
+
+async function encodeAtQualityAndScale(
+  input: Buffer,
+  targetFormat: LossyQualityFormat,
+  quality: number,
+  scale: number,
+  options: ImageConvertOptions,
+  baseWidth: number
+): Promise<Buffer> {
+  let pipeline = sharp(input, { failOn: 'error' }).rotate();
+  if (options.keepMetadata) pipeline = pipeline.withMetadata();
+  pipeline = applyResize(pipeline, options.resize);
+  if (scale < 1) {
+    pipeline = pipeline.resize({ width: Math.max(20, Math.round(baseWidth * scale)) });
+  }
+  switch (targetFormat) {
+    case 'jpg':
+    case 'jpeg':
+      return pipeline.jpeg({ quality }).toBuffer();
+    case 'webp':
+      return pipeline.webp({ quality }).toBuffer();
+    case 'avif':
+      return pipeline.avif({ quality }).toBuffer();
+  }
+}
+
+/**
+ * Binary-searches the quality setting (and, if needed, progressively
+ * downscales) so the encoded output fits under maxSizeBytes. Falls back to
+ * the smallest result produced if the target truly can't be reached.
+ */
+export async function compressToTargetSize(
+  input: Buffer,
+  targetFormat: ImageFormat,
+  maxSizeBytes: number,
+  options: ImageConvertOptions = {}
+): Promise<Buffer> {
+  if (!isLossyQualityFormat(targetFormat)) {
+    throw new ValidationError('Compressing to a target size is only supported for jpg, webp, or avif output');
+  }
+  const format = targetFormat as LossyQualityFormat;
+
+  try {
+    const meta = await sharp(input).metadata();
+    const baseWidth = options.resize?.width ?? meta.width ?? 1600;
+
+    const scales = [1, 0.85, 0.7, 0.55, 0.4, 0.25];
+    let fallback: Buffer | null = null;
+
+    for (const scale of scales) {
+      let low = 1;
+      let high = 100;
+      let found: Buffer | null = null;
+
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        const candidate = await encodeAtQualityAndScale(input, format, mid, scale, options, baseWidth);
+        if (candidate.length <= maxSizeBytes) {
+          found = candidate;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+
+      if (found) return found;
+      fallback = await encodeAtQualityAndScale(input, format, 1, scale, options, baseWidth);
+    }
+
+    // Even the smallest scale at minimum quality still exceeds the target;
+    // return the smallest result produced as a best effort.
+    return fallback!;
+  } catch (err) {
+    if (err instanceof ValidationError || err instanceof CorruptFileError) throw err;
+    throw new CorruptFileError('Unable to compress image — the file may be corrupt or malformed');
   }
 }
 

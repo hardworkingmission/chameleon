@@ -8,7 +8,7 @@ import { buildZipStream } from '../services/zip.service';
 import { recordConversion } from '../services/history.service';
 import { cleanupUploadedFile } from '../middleware/validateFile.middleware';
 import { sanitizeOriginalName } from '../utils/filename';
-import { normalizeFormat, EXT_TO_MIME } from '../utils/formats';
+import { normalizeFormat, isHeicFormat, isPdfFormat, isLossyQualityFormat, EXT_TO_MIME } from '../utils/formats';
 import { logger } from '../utils/logger';
 import { ValidationError } from '../utils/errors';
 
@@ -36,22 +36,50 @@ function parseResize(body: Record<string, unknown>): ResizeOptions | undefined {
   return { width, height, fit };
 }
 
+function parseMaxSizeBytes(raw: unknown): number | undefined {
+  if (raw === undefined || raw === '') return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) throw new ValidationError('maxSizeKB must be a positive number');
+  return Math.round(n * 1024);
+}
+
 function baseName(filename: string): string {
   return path.basename(filename, path.extname(filename));
+}
+
+/**
+ * A request may omit targetFormat entirely to mean "keep the original
+ * format" — used for resize-only, metadata-only, or size-target compression
+ * requests. HEIC/HEIF has no output encoder, so it falls back to jpg; a PDF
+ * source falls back to png (or jpg when a size target is requested, since
+ * PNG has no quality knob to compress with).
+ */
+function resolveTargetFormat(detectedFormat: string, rawTarget: unknown, needsLossyQuality: boolean): string {
+  if (rawTarget !== undefined && rawTarget !== '') return normalizeFormat(rawTarget as string);
+  if (isHeicFormat(detectedFormat)) return 'jpg';
+  if (isPdfFormat(detectedFormat)) return needsLossyQuality ? 'jpg' : 'png';
+  if (needsLossyQuality && !isLossyQualityFormat(detectedFormat)) return 'jpg';
+  return detectedFormat;
 }
 
 export async function convertSingle(req: Request, res: Response, next: NextFunction) {
   const file = req.file!;
   const detectedFormat = (req as any).detectedFormat as string;
-  const targetFormat = normalizeFormat(req.body.targetFormat);
   const quality = parseQuality(req.body.quality);
   const keepMetadata = req.body.keepMetadata === 'true';
   const originalName = sanitizeOriginalName(file.originalname);
+  let targetFormat = '';
 
   try {
     const resize = parseResize(req.body);
+    const maxSizeBytes = parseMaxSizeBytes(req.body.maxSizeKB);
+    targetFormat = resolveTargetFormat(detectedFormat, req.body.targetFormat, !!maxSizeBytes);
     const inputBuffer = await fs.readFile(file.path);
-    const result = await convertFile(inputBuffer, detectedFormat, targetFormat, { quality, keepMetadata, resize });
+    const result = await convertFile(inputBuffer, detectedFormat, targetFormat, { quality, keepMetadata, resize, maxSizeBytes });
+
+    if (maxSizeBytes && result.buffers.some((b) => b.buffer.length > maxSizeBytes)) {
+      res.setHeader('X-Compression-Target-Met', 'false');
+    }
 
     if (req.auth) {
       await recordConversion({
@@ -99,24 +127,33 @@ export async function convertSingle(req: Request, res: Response, next: NextFunct
 export async function convertBatch(req: Request, res: Response, next: NextFunction) {
   const files = (req.files as Express.Multer.File[]) ?? [];
   const detectedFormats = (req as any).detectedFormats as Record<string, string>;
-  const targetFormat = normalizeFormat(req.body.targetFormat);
   const quality = parseQuality(req.body.quality);
   const keepMetadata = req.body.keepMetadata === 'true';
 
   const zipEntries: { name: string; buffer: Buffer }[] = [];
   const errors: { file: string; error: string }[] = [];
 
+  let compressionTargetMissed = false;
+
   try {
     const resize = parseResize(req.body);
+    const maxSizeBytes = parseMaxSizeBytes(req.body.maxSizeKB);
     for (const file of files) {
       const originalName = sanitizeOriginalName(file.originalname);
       const detected = detectedFormats[file.path];
+      // Resolved per-file since the "no targetFormat = keep source format"
+      // default depends on each file's own detected format.
+      const targetFormat = resolveTargetFormat(detected === 'INVALID' ? '' : detected, req.body.targetFormat, !!maxSizeBytes);
       try {
         if (detected === 'INVALID') {
           throw new Error('Unsupported or corrupt file');
         }
         const inputBuffer = await fs.readFile(file.path);
-        const result = await convertFile(inputBuffer, detected, targetFormat, { quality, keepMetadata, resize });
+        const result = await convertFile(inputBuffer, detected, targetFormat, { quality, keepMetadata, resize, maxSizeBytes });
+
+        if (maxSizeBytes && result.buffers.some((b) => b.buffer.length > maxSizeBytes)) {
+          compressionTargetMissed = true;
+        }
 
         result.buffers.forEach((b, i) => {
           zipEntries.push({
@@ -155,6 +192,9 @@ export async function convertBatch(req: Request, res: Response, next: NextFuncti
       zipEntries.push({ name: 'errors.json', buffer: Buffer.from(JSON.stringify(errors, null, 2)) });
     }
 
+    if (compressionTargetMissed) {
+      res.setHeader('X-Compression-Target-Met', 'false');
+    }
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename="chameleon-batch.zip"');
     buildZipStream(zipEntries).pipe(res);

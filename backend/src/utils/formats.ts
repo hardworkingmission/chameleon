@@ -53,3 +53,11 @@ export function isHeicFormat(format: string): format is HeicFormat {
 export function isPdfFormat(format: string): boolean {
   return normalizeFormat(format) === 'pdf';
 }
+
+// Formats with a continuous quality knob, so we can binary-search for a
+// target output file size. PNG/GIF/BMP/TIFF have no equivalent lever.
+export const LOSSY_QUALITY_FORMATS = new Set(['jpg', 'jpeg', 'webp', 'avif']);
+
+export function isLossyQualityFormat(format: string): boolean {
+  return LOSSY_QUALITY_FORMATS.has(normalizeFormat(format));
+}

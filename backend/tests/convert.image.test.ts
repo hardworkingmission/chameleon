@@ -44,6 +44,31 @@ describe('POST /api/convert (image formats)', () => {
     expect(metadata.height).toBeLessThanOrEqual(80);
   });
 
+  it('resizes without a targetFormat and keeps the original format', async () => {
+    const png = await makePngBuffer(200, 200);
+    const res = await request(app)
+      .post('/api/convert')
+      .field('width', '80')
+      .field('height', '80')
+      .attach('file', png, { filename: 'input.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('image/png');
+    const metadata = await sharp(res.body).metadata();
+    expect(metadata.format).toBe('png');
+    expect(metadata.width).toBeLessThanOrEqual(80);
+    expect(metadata.height).toBeLessThanOrEqual(80);
+  });
+
+  it('rejects a request with neither targetFormat nor resize dimensions', async () => {
+    const png = await makePngBuffer();
+    const res = await request(app)
+      .post('/api/convert')
+      .attach('file', png, { filename: 'input.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(400);
+  });
+
   it('rejects a resize dimension above the maximum', async () => {
     const png = await makePngBuffer();
     const res = await request(app)

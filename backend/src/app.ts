@@ -17,7 +17,13 @@ export function createApp() {
   const app = express();
 
   app.use(helmet());
-  app.use(cors({ origin: env.corsOrigin, credentials: true }));
+  app.use(
+    cors({
+      origin: env.corsOrigin,
+      credentials: true,
+      exposedHeaders: ['Content-Disposition', 'X-Compression-Target-Met'],
+    })
+  );
   app.use(morgan('combined', { stream: httpLogStream }));
   app.use(cookieParser());
   app.use(express.json());

@@ -17,6 +17,19 @@ export async function makeJpegBuffer(width = 64, height = 64): Promise<Buffer> {
     .toBuffer();
 }
 
+/**
+ * Random noise compresses poorly, so unlike a flat-color image its JPEG size
+ * actually varies with quality — needed to exercise size-target compression.
+ */
+export async function makeNoisyJpegBuffer(width = 900, height = 700): Promise<Buffer> {
+  const channels = 3;
+  const raw = Buffer.alloc(width * height * channels);
+  for (let i = 0; i < raw.length; i++) {
+    raw[i] = Math.floor(Math.random() * 256);
+  }
+  return sharp(raw, { raw: { width, height, channels } }).jpeg({ quality: 100 }).toBuffer();
+}
+
 export async function makeSinglePagePdfBuffer(): Promise<Buffer> {
   const doc = await PDFDocument.create();
   const page = doc.addPage([200, 200]);

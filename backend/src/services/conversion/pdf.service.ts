@@ -2,7 +2,7 @@ import { PDFDocument } from 'pdf-lib';
 import { CorruptFileError } from '../../utils/errors';
 import { ImageFormat } from '../../utils/formats';
 import { convertImage, resizeImage, ImageConvertOptions, ResizeOptions } from './image.service';
-import { dynamicImport } from '../../utils/dynamicImport';
+import { cachedDynamicImport } from '../../utils/dynamicImport';
 
 export interface PdfPageImage {
   page: number;
@@ -19,10 +19,10 @@ export async function convertPdfToImages(
 ): Promise<PdfPageImage[]> {
   try {
     // pdf-to-img is ESM-only; import lazily so it works under CommonJS output.
-    const { pdf } = await dynamicImport('pdf-to-img');
+    const { pdf } = await cachedDynamicImport('pdf-to-img');
     const document = await pdf(input, { scale: 2 });
 
-    const needsReencode = targetFormat !== 'png' || !!options.resize;
+    const needsReencode = targetFormat !== 'png' || !!options.resize || !!options.maxSizeBytes;
     const pages: PdfPageImage[] = [];
     let pageNumber = 1;
     for await (const pngBuffer of document) {

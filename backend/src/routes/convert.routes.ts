@@ -7,7 +7,7 @@ import { convertSingle, convertBatch, convertImagesToSinglePdf } from '../contro
 const router = Router();
 
 router.post('/', optionalAuth, uploadSingle, validateSingleFile, convertSingle);
-router.post('/batch', optionalAuth, uploadBatch, validateBatchFiles, convertBatch);
-router.post('/batch/merge-pdf', optionalAuth, uploadBatch, validateBatchFiles, convertImagesToSinglePdf);
+router.post('/batch', optionalAuth, uploadBatch, validateBatchFiles(), convertBatch);
+router.post('/batch/merge-pdf', optionalAuth, uploadBatch, validateBatchFiles({ requireTargetFormat: false }), convertImagesToSinglePdf);
 
 export default router;

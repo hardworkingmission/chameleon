@@ -25,6 +25,7 @@ export default function FormatSelector({ value, onChange }: FormatSelectorProps)
           fontSize: 14,
         }}
       >
+        <option value="">Keep original format</option>
         {TARGET_FORMATS.map((f) => (
           <option key={f.value} value={f.value}>
             {f.label}

@@ -1,7 +1,7 @@
 import { CorruptFileError } from '../../utils/errors';
 import { ImageFormat } from '../../utils/formats';
 import { convertImage, ImageConvertOptions } from './image.service';
-import { dynamicImport } from '../../utils/dynamicImport';
+import { cachedDynamicImport } from '../../utils/dynamicImport';
 
 export async function convertHeic(
   input: Buffer,
@@ -10,7 +10,7 @@ export async function convertHeic(
 ): Promise<Buffer> {
   try {
     // heic-convert is ESM-only; import lazily so it works under CommonJS output.
-    const heicConvert = (await dynamicImport('heic-convert')).default;
+    const heicConvert = (await cachedDynamicImport('heic-convert')).default;
     const intermediateFormat = targetFormat === 'jpg' || targetFormat === 'jpeg' ? 'JPEG' : 'PNG';
     const jpegOrPngBuffer = (await heicConvert({
       buffer: input,
@@ -18,7 +18,10 @@ export async function convertHeic(
       quality: (options.quality ?? 85) / 100,
     })) as Buffer;
 
-    const needsReencode = !(targetFormat === 'jpg' || targetFormat === 'jpeg' || targetFormat === 'png') || !!options.resize;
+    const needsReencode =
+      !(targetFormat === 'jpg' || targetFormat === 'jpeg' || targetFormat === 'png') ||
+      !!options.resize ||
+      !!options.maxSizeBytes;
     if (!needsReencode) {
       return jpegOrPngBuffer;
     }

@@ -6,6 +6,9 @@ on your own backend — no third-party conversion APIs are called.
 - **Images**: JPG, PNG, WebP, GIF, BMP, TIFF, AVIF (any → any)
 - **Apple photos**: HEIC/HEIF → any standard image format
 - **Documents**: PDF → image (one file per page), image(s) → PDF
+- **Resize**: to exact dimensions, with quick presets for 300×300 and passport photos (2×2in / 600×600px)
+- **Compress to a target size**: quick presets for under 50 KB / under 100 KB, or any custom `maxSizeKB`
+- **Remove metadata**: strips EXIF/GPS on every conversion by default, or on its own via a one-click "Remove metadata" action
 
 ## Architecture
 
@@ -109,17 +112,38 @@ through the backend/frontend variables above to each container.
 | `POST /api/auth/login` | — | `{ email, password }` → sets JWT cookie |
 | `POST /api/auth/logout` | — | Clears the JWT cookie |
 | `GET /api/auth/me` | JWT | Current user |
-| `POST /api/convert` | optional | multipart `file` + `targetFormat` (+ optional `quality`, `keepMetadata`, `width`, `height`, `fit`) → converted file. Logged-in requests are recorded in history. |
-| `POST /api/convert/batch` | optional | multipart `files[]` + `targetFormat` (+ optional resize params) → ZIP of converted files (partial failures are listed in `errors.json` inside the ZIP) |
+| `POST /api/convert` | optional | multipart `file` + optional `targetFormat` (+ optional `quality`, `keepMetadata`, `width`, `height`, `fit`, `maxSizeKB`, `stripMetadata`) → converted file. `targetFormat` may be omitted for a resize-only, compress-only, or metadata-only request (see below). Logged-in requests are recorded in history. |
+| `POST /api/convert/batch` | optional | multipart `files[]` + optional `targetFormat` (+ optional resize/compress params) → ZIP of converted files (partial failures are listed in `errors.json` inside the ZIP) |
 | `POST /api/convert/batch/merge-pdf` | optional | multipart `files[]` (images) (+ optional resize params) → a single merged PDF, one page per image |
+| `GET /api/history` | JWT | Paginated conversion history (`?page=&pageSize=`) |
+| `GET /api/health` | — | `{ status, dbConnected, uptimeSeconds }` |
+
+`targetFormat` is optional: if omitted, at least one of `width`/`height`,
+`maxSizeKB`, or `stripMetadata` must be supplied, and the file is processed
+while keeping its original format (HEIC/HEIF falls back to jpg, and PDF falls
+back to png — or jpg if `maxSizeKB` is set — since neither has a native output
+encoder). Requests with none of these are rejected with a `ValidationError`.
 
 Resize params (all optional — omit to keep original dimensions): `width` / `height` in
 pixels (max 8000px each, at least one required to trigger a resize), and `fit`
 (`inside` [default, keeps aspect ratio], `cover`, `contain`, `fill`, or `outside` —
 same semantics as sharp's `resize` fit modes). Resizing applies before format
 encoding for images/HEIC/PDF-to-image, and before embedding for image-to-PDF.
-| `GET /api/history` | JWT | Paginated conversion history (`?page=&pageSize=`) |
-| `GET /api/health` | — | `{ status, dbConnected, uptimeSeconds }` |
+`fit: cover` with equal width/height is how the frontend's "passport photo" and
+"resize 300×300" presets produce an exact square crop.
+
+Compress-to-size: `maxSizeKB` (positive number) binary-searches the JPG/WebP/AVIF
+quality setting (progressively downscaling as a fallback) until the output fits
+under that size — only supported for those three lossy formats; requesting it
+with `targetFormat=png` (or another non-lossy format) is rejected with a
+`ValidationError`. If the target truly can't be reached (e.g. an extremely
+detailed image at a very small `maxSizeKB`), the response still succeeds with
+the smallest result achieved, plus an `X-Compression-Target-Met: false` header.
+
+Metadata: EXIF/GPS/etc. is stripped by default on any re-encode; pass
+`keepMetadata=true` to preserve it. To strip metadata **without** changing
+format, resizing, or compressing, send `stripMetadata=true` with no other
+params — this is what the frontend's "Remove metadata" preset does.
 
 All error responses are JSON: `{ "error": "UnsupportedFormatError", "message": "..." }`.
 Relevant error types: `UnsupportedFormatError` (415), `CorruptFileError` (422),
@@ -155,10 +179,18 @@ cd backend
 npm test
 ```
 
-Image, PDF, batch, and HEIC-conversion tests generate their own fixtures in-memory
-(via `sharp`/`pdf-lib`) and don't need a database. The auth flow tests
+Image, PDF, batch, HEIC-conversion, and compression tests generate their own fixtures
+in-memory (via `sharp`/`pdf-lib`) and don't need a database. The auth flow tests
 (`tests/auth.test.ts`) do need a reachable MySQL database at `DATABASE_URL` — point
 it at a disposable test database before running the full suite.
+
+Test files intentionally run one-per-process (no `--runInBand`): `file-type`,
+`heic-convert`, and `pdf-to-img` are ESM-only and loaded via a cached dynamic
+`import()` (see `src/utils/dynamicImport.ts`), which under Jest's
+`--experimental-vm-modules` flag isn't safe to share across test files in a
+single worker — running them in-band intermittently produced spurious "Test
+environment has been torn down" failures. Per-file processes give each file
+its own V8 realm and avoid that entirely.
 
 ## Notes on format support
 

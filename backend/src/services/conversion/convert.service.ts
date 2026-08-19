@@ -1,5 +1,5 @@
 import { isHeicFormat, isImageFormat, isPdfFormat, ImageFormat, normalizeFormat } from '../../utils/formats';
-import { UnsupportedFormatError } from '../../utils/errors';
+import { UnsupportedFormatError, ValidationError } from '../../utils/errors';
 import { convertImage, ResizeOptions } from './image.service';
 import { convertHeic } from './heic.service';
 import { convertPdfToImages, convertImagesToPdf, PdfPageImage } from './pdf.service';
@@ -8,6 +8,7 @@ export interface ConvertOptions {
   quality?: number;
   keepMetadata?: boolean;
   resize?: ResizeOptions;
+  maxSizeBytes?: number;
 }
 
 export interface ConvertResult {
@@ -36,6 +37,9 @@ export async function convertFile(
   }
 
   if (isImageFormat(source) && isPdfFormat(target)) {
+    if (options.maxSizeBytes) {
+      throw new ValidationError('Compressing to a target size is not supported when converting to PDF');
+    }
     const buffer = await convertImagesToPdf([{ buffer: input, format: source }], options.resize);
     return { buffers: [{ buffer, suffix: '' }] };
   }
