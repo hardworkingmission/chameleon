@@ -39,4 +39,4 @@ install -d -m 0700 /opt/chameleon /opt/chameleon/releases /etc/chameleon
 install -d -m 0755 /etc/chameleon/rds
 curl -fsSL https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o /etc/chameleon/rds/global-bundle.pem
 chmod 0644 /etc/chameleon/rds/global-bundle.pem
-echo 'Ready. Create /etc/chameleon/.env with mode 600 and configure the EC2 IAM role.'
+echo 'Ready. Create /home/admin/chameleon/backend/.env with mode 600 and configure the EC2 IAM role.'

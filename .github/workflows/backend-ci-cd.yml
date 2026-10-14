@@ -142,5 +142,6 @@ jobs:
       - name: Deploy through Systems Manager and wait for result
         env:
           EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID || 'i-007cf303e9600c2ce' }}
+          BACKEND_ENV_FILE: ${{ vars.BACKEND_ENV_FILE || '/home/admin/chameleon/backend/.env' }}
           IMAGE_TAG: ${{ needs.test.outputs.tag }}
         run: python3 deploy/send-deployment.py

@@ -4,6 +4,7 @@ import io
 import os
 from pathlib import Path
 import subprocess
+import shlex
 import tarfile
 import tempfile
 import unittest
@@ -36,6 +37,16 @@ class CliTests(unittest.TestCase):
 
 
 class RequestTests(unittest.TestCase):
+    def test_environment_path_is_passed_as_one_shell_argument(self):
+        path = "/home/admin/my app/'$(touch unexpected)'/.env"
+        request = sender.build_request('i-0123456789abcdef0', 'us-east-1', '123456789012', TAG, path)
+        self.assertEqual(shlex.split(request['Parameters']['commands'][-1])[-1], path)
+
+    def test_rejects_relative_or_multiline_environment_paths(self):
+        for path in ('backend/.env', '/tmp/file\ncommand', '/tmp/file\0'):
+            with self.assertRaises(ValueError):
+                sender.build_request('i-0123456789abcdef0', 'us-east-1', '123456789012', TAG, path)
+
     def test_bundle_contains_only_release_files(self):
         request = sender.build_request('i-0123456789abcdef0', 'us-east-1', '123456789012', TAG)
         payload = request['Parameters']['commands'][3].split("'")[3]
@@ -93,7 +104,7 @@ exit 0
 
     def run_deploy(self, **overrides):
         return subprocess.run(['bash', str(self.script), str(self.release), 'us-east-1',
-                               '123456789012.dkr.ecr.us-east-1.amazonaws.com', TAG],
+                               '123456789012.dkr.ecr.us-east-1.amazonaws.com', TAG, str(self.config / '.env')],
                               env=dict(self.env, **overrides), capture_output=True, text=True)
 
     def test_migration_failure_does_not_replace_api(self):

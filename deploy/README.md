@@ -59,11 +59,15 @@ Systems Manager before triggering deployment.
 
 ## 2. Configure application secrets on EC2
 
-Copy `deploy/backend.env.example` to the instance, then:
+Deployment reads the existing backend `.env` on EC2 at
+`/home/admin/chameleon/backend/.env`. If it is already populated, keep it and
+restrict its permissions with `chmod 600`. For a new configuration only, copy
+`deploy/backend.env.example` to the instance, then:
 
 ```bash
-sudo install -m 600 backend.env.example /etc/chameleon/.env
-sudoedit /etc/chameleon/.env
+sudo install -d -m 700 /home/admin/chameleon/backend
+sudo install -m 600 backend.env.example /home/admin/chameleon/backend/.env
+sudoedit /home/admin/chameleon/backend/.env
 ```
 
 Set `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, and `APP_DOMAIN`.
@@ -147,10 +151,16 @@ branches to **main**, and add these environment variables:
 | `AWS_REGION` | Optional override; defaults to `us-east-1`. Must match EC2/ECR. |
 | `AWS_DEPLOY_ROLE_ARN` | `arn:aws:iam::123456789012:role/chameleon-github-deploy` |
 | `EC2_INSTANCE_ID` | Optional override; defaults to `i-007cf303e9600c2ce` |
+| `BACKEND_ENV_FILE` | Absolute path on EC2; defaults to `/home/admin/chameleon/backend/.env` |
 | `EC2_DOCKER_PLATFORM` | `linux/amd64` for x86_64, `linux/arm64` for Graviton |
 
 No application secrets go in these variables. The ARM build uses emulation and
 may take longer because native dependencies can compile from source.
+`BACKEND_ENV_FILE` contains only a path; the file contents remain on EC2. Both
+the API and migration containers receive their environment from that file.
+If using a custom path for manual Compose commands, export `BACKEND_ENV_FILE`
+and use the same path with `--env-file`. Manual rollback scripts accept that
+path as an optional fifth argument.
 The IAM policy targets `i-007cf303e9600c2ce`; update its instance ARN as well
 if you override `EC2_INSTANCE_ID`.
 
@@ -173,8 +183,8 @@ On the instance, inspect the current release:
 
 ```bash
 cd /opt/chameleon/current
-sudo docker compose --env-file /etc/chameleon/.env --env-file image.env -f compose.yml ps
-sudo docker compose --env-file /etc/chameleon/.env --env-file image.env -f compose.yml logs --tail=100 backend
+sudo docker compose --env-file /home/admin/chameleon/backend/.env --env-file image.env -f compose.yml ps
+sudo docker compose --env-file /home/admin/chameleon/backend/.env --env-file image.env -f compose.yml logs --tail=100 backend
 ```
 
 Run these commands from a root session if your user cannot enter the protected

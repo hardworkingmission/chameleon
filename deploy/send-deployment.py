@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import tarfile
 import time
@@ -23,11 +24,13 @@ def checked(value, pattern, label):
     return value
 
 
-def build_request(instance, region, account, tag):
+def build_request(instance, region, account, tag, env_file='/home/admin/chameleon/backend/.env'):
     checked(instance, r'i-[a-f0-9]{8,17}', 'instance ID')
     checked(region, r'[a-z]{2}-[a-z]+-\d+', 'region')
     checked(account, r'\d{12}', 'account ID')
     checked(tag, r'[a-f0-9]{40}-\d+-\d+', 'release tag')
+    if not env_file.startswith('/') or any(c in env_file for c in '\r\n\0'):
+        raise ValueError('Invalid backend environment file path')
     archive = io.BytesIO()
     with tarfile.open(fileobj=archive, mode='w:gz') as tar:
         for name, source in FILES.items():
@@ -40,13 +43,13 @@ def build_request(instance, region, account, tag):
     encoded = base64.b64encode(archive.getvalue()).decode('ascii')
     directory = f'/opt/chameleon/releases/{tag}'
     registry = f'{account}.dkr.ecr.{region}.amazonaws.com'
-    # Every interpolated value is restricted above; the payload is base64.
+    # Identifiers are restricted above; the file path is shell-quoted.
     commands = [
         'set -eu',
         'umask 077',
         f'mkdir -p {directory}',
         f"printf '%s' '{encoded}' | base64 -d | tar -xz -C {directory}",
-        f'bash {directory}/deploy.sh {directory} {region} {registry} {tag}',
+        f'bash {directory}/deploy.sh {directory} {region} {registry} {tag} {shlex.quote(env_file)}',
     ]
     return {
         'InstanceIds': [instance],
@@ -65,7 +68,8 @@ def aws(*args):
 def main():
     account = json.loads(aws('sts', 'get-caller-identity').stdout)['Account']
     instance = os.environ['EC2_INSTANCE_ID']
-    request = build_request(instance, os.environ['AWS_REGION'], account, os.environ['IMAGE_TAG'])
+    request = build_request(instance, os.environ['AWS_REGION'], account, os.environ['IMAGE_TAG'],
+                            os.environ.get('BACKEND_ENV_FILE') or '/home/admin/chameleon/backend/.env')
     response = aws('ssm', 'send-command', '--cli-input-json', json.dumps(request))
     command_id = json.loads(response.stdout)['Command']['CommandId']
     print(f'SSM command: {command_id}', flush=True)

@@ -10,7 +10,7 @@ services:
   migrate:
     image: ${ECR_REGISTRY:?required}/gold-ecr-migrations:${IMAGE_TAG:?required}
     profiles: [tools]
-    env_file: /etc/chameleon/.env
+    env_file: ${BACKEND_ENV_FILE:-/home/admin/chameleon/backend/.env}
     volumes:
       - /etc/chameleon/rds:/app/certs:ro
     logging: *logging
@@ -19,7 +19,7 @@ services:
     image: ${ECR_REGISTRY:?required}/gold-ecr:${IMAGE_TAG:?required}
     restart: unless-stopped
     init: true
-    env_file: /etc/chameleon/.env
+    env_file: ${BACKEND_ENV_FILE:-/home/admin/chameleon/backend/.env}
     environment:
       NODE_ENV: production
       PORT: '4000'
