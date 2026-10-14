@@ -34,7 +34,8 @@ compose() {
     -f "$dir/compose.yml" "$@"
 }
 compose "$release_dir" config --quiet
-compose "$release_dir" pull backend migrate
+# Keep download progress from exhausting SSM's captured stderr limit.
+compose "$release_dir" pull --quiet backend migrate
 # Migrations happen while the old API still runs: use backward-compatible migrations.
 compose "$release_dir" run --rm --no-deps migrate
 
