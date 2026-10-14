@@ -7,12 +7,32 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('sender', ROOT / 'deploy/send-deployment.py')
 sender = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sender)
 TAG = 'a' * 40 + '-123-1'
+
+
+class CliTests(unittest.TestCase):
+    def test_reports_service_error_without_dumping_request(self):
+        for detail in ('AccessDeniedException: missing ssm:SendCommand',
+                       'InvalidInstanceId: instance is not available'):
+            error = subprocess.CalledProcessError(
+                254, ['aws', 'ssm', 'send-command', 'DEPLOYMENT_PAYLOAD'], stderr=detail)
+            with patch.object(sender, 'main', side_effect=error):
+                with self.assertRaises(SystemExit) as raised:
+                    sender.cli()
+            self.assertIn(detail, str(raised.exception))
+            self.assertNotIn('DEPLOYMENT_PAYLOAD', str(raised.exception))
+
+    def test_reports_failure_when_stderr_is_empty(self):
+        error = subprocess.CalledProcessError(254, ['aws'], stderr=None)
+        with patch.object(sender, 'main', side_effect=error):
+            with self.assertRaisesRegex(SystemExit, 'exit 254.*no error details'):
+                sender.cli()
 
 
 class RequestTests(unittest.TestCase):

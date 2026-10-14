@@ -90,5 +90,15 @@ def main():
     raise SystemExit(f'Timed out waiting for SSM command {command_id}; inspect it before retrying.')
 
 
+def cli():
+    try:
+        main()
+    except subprocess.CalledProcessError as error:
+        # CalledProcessError otherwise prints the entire deployment payload
+        # while hiding the AWS service error captured on stderr.
+        detail = (error.stderr or '').strip() or 'AWS CLI returned no error details.'
+        raise SystemExit(f'AWS CLI failed (exit {error.returncode}): {detail}') from None
+
+
 if __name__ == '__main__':
-    main()
+    cli()
