@@ -144,7 +144,7 @@ branches to **main**, and add these environment variables:
 
 | Variable | Example / value |
 | --- | --- |
-| `AWS_REGION` | Your EC2/ECR region, e.g. `ap-southeast-1` |
+| `AWS_REGION` | Optional override; defaults to `us-east-1`. Must match EC2/ECR. |
 | `AWS_DEPLOY_ROLE_ARN` | `arn:aws:iam::123456789012:role/chameleon-github-deploy` |
 | `EC2_INSTANCE_ID` | Optional override; defaults to `i-007cf303e9600c2ce` |
 | `EC2_DOCKER_PLATFORM` | `linux/amd64` for x86_64, `linux/arm64` for Graviton |
