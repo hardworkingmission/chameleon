@@ -1,12 +1,11 @@
-FROM node:20-bookworm-slim AS build
+FROM node:22-bookworm-slim AS build
 WORKDIR /app
 
-# pdf-to-img pulls in `canvas`, a native module. It ships prebuilt binaries
-# for glibc (Debian) but not musl (Alpine), so we use a Debian base to avoid
-# compiling it from source (which needs a compiler + network access for
-# node-gyp's Node header download).
+# Native dependencies can fall back to source builds on Node 22 or ARM.
+# Keep the compiler and development libraries in the build stage.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  openssl libcairo2 libpango-1.0-0 libjpeg62-turbo libgif7 librsvg2-2 \
+  openssl build-essential python3 pkg-config \
+  libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
@@ -18,7 +17,12 @@ COPY src ./src
 RUN npx prisma generate
 RUN npm run build
 
-FROM node:20-bookworm-slim AS runtime
+FROM build AS migrations
+ENV NODE_ENV=production
+USER node
+CMD ["node_modules/.bin/prisma", "migrate", "deploy"]
+
+FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 

@@ -19,13 +19,31 @@ function num(name: string, fallback: number): number {
   return parsed;
 }
 
+const nodeEnv = process.env.NODE_ENV ?? 'development';
+const jwtSecret = required('JWT_SECRET', 'dev-secret-change-me');
+const placeholderSecrets = new Set([
+  'dev-secret-change-me',
+  'change-me-to-a-long-random-string',
+  'REPLACE_WITH_AT_LEAST_32_RANDOM_CHARACTERS',
+]);
+if (nodeEnv === 'production' &&
+    (jwtSecret.trim().length < 32 || placeholderSecrets.has(jwtSecret.trim()))) {
+  throw new Error('Production JWT_SECRET must be a non-placeholder secret of at least 32 characters');
+}
+
+const trustProxyHops = num('TRUST_PROXY_HOPS', 0);
+if (!Number.isSafeInteger(trustProxyHops) || trustProxyHops < 0) {
+  throw new Error('TRUST_PROXY_HOPS must be a non-negative integer');
+}
+
 export const env = {
-  nodeEnv: process.env.NODE_ENV ?? 'development',
+  nodeEnv,
   port: num('PORT', 4000),
   databaseUrl: required('DATABASE_URL', 'mysql://root:root@localhost:3306/chameleon'),
-  jwtSecret: required('JWT_SECRET', 'dev-secret-change-me'),
+  jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
   corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
+  trustProxyHops,
 
   maxFileSizeMb: num('MAX_FILE_SIZE_MB', 25),
   maxBatchFiles: num('MAX_BATCH_FILES', 20),

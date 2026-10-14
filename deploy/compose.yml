@@ -1,0 +1,62 @@
+name: chameleon-backend
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+
+services:
+  migrate:
+    image: ${ECR_REGISTRY:?required}/gold-ecr-migrations:${IMAGE_TAG:?required}
+    profiles: [tools]
+    env_file: /etc/chameleon/.env
+    volumes:
+      - /etc/chameleon/rds:/app/certs:ro
+    logging: *logging
+
+  backend:
+    image: ${ECR_REGISTRY:?required}/gold-ecr:${IMAGE_TAG:?required}
+    restart: unless-stopped
+    init: true
+    env_file: /etc/chameleon/.env
+    environment:
+      NODE_ENV: production
+      PORT: '4000'
+      RUN_MIGRATIONS_ON_STARTUP: 'false'
+    ports:
+      - '${BACKEND_BIND_ADDRESS:-127.0.0.1}:4000:4000'
+    volumes:
+      - storage:/app/storage
+      - logs:/app/logs
+      - /etc/chameleon/rds:/app/certs:ro
+    mem_limit: ${BACKEND_MEMORY_LIMIT:-1g}
+    cpus: ${BACKEND_CPUS:-2}
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+
+  proxy:
+    image: caddy:2-alpine
+    profiles: [https]
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging: *logging
+
+volumes:
+  storage:
+  logs:
+  caddy-data:
+  caddy-config:

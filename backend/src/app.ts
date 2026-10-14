@@ -15,15 +15,19 @@ import './auth/passport';
 
 export function createApp() {
   const app = express();
+  app.set('trust proxy', env.trustProxyHops);
 
   app.use(helmet());
-  app.use(cors({ origin: env.corsOrigin, credentials: true }));
+  app.use(cors({
+    origin: env.corsOrigin,
+    credentials: true,
+    exposedHeaders: ['Content-Disposition'],
+  }));
   app.use(morgan('combined', { stream: httpLogStream }));
   app.use(cookieParser());
   app.use(express.json());
-  app.use(apiRateLimiter);
-
   app.use('/api/health', healthRoutes);
+  app.use(apiRateLimiter);
   app.use('/api/auth', authRoutes);
   app.use('/api/convert', convertRoutes);
   app.use('/api/history', historyRoutes);

@@ -1,0 +1,127 @@
+name: Backend CI and EC2 deployment
+
+on:
+  pull_request:
+    paths: ['backend/**', 'deploy/**', '.github/workflows/backend-ci-cd.yml', '.gitattributes']
+  push:
+    branches: [main]
+    paths: ['backend/**', 'deploy/**', '.github/workflows/backend-ci-cd.yml', '.gitattributes']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+    services:
+      # Disposable CI database only. Production uses the existing RDS instance.
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-password
+          MYSQL_DATABASE: chameleon_test
+          MYSQL_USER: chameleon
+          MYSQL_PASSWORD: ci-test-password
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -pci-root-password"
+          --health-interval=10s --health-timeout=5s --health-retries=15
+    env:
+      DATABASE_URL: mysql://chameleon:ci-test-password@127.0.0.1:3306/chameleon_test
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Native image and PDF dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3 pkg-config libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+      - run: npm ci
+        working-directory: backend
+      - run: npm run prisma:generate && npm run prisma:deploy
+        working-directory: backend
+      - run: npm run lint && npm test && npm run build
+        working-directory: backend
+      - name: Validate deployment scripts
+        run: |
+          bash -n backend/scripts/deploy.sh deploy/bootstrap-debian.sh
+          python3 -m unittest discover -s deploy/tests -v
+      - name: Release identifier
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+  images:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repository: gold-ecr
+            target: runtime
+          - repository: gold-ecr-migrations
+            target: migrations
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: ./backend
+          target: ${{ matrix.target }}
+          platforms: ${{ vars.EC2_DOCKER_PLATFORM || 'linux/amd64' }}
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ matrix.repository }}:${{ needs.test.outputs.tag }}
+          cache-from: type=gha,scope=${{ matrix.repository }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.repository }}
+
+  deploy:
+    needs: [test, images]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Deploy through Systems Manager and wait for result
+        env:
+          EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID || 'i-007cf303e9600c2ce' }}
+          IMAGE_TAG: ${{ needs.test.outputs.tag }}
+        run: python3 deploy/send-deployment.py
