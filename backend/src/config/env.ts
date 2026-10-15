@@ -36,7 +36,18 @@ if (!Number.isSafeInteger(trustProxyHops) || trustProxyHops < 0) {
   throw new Error('TRUST_PROXY_HOPS must be a non-negative integer');
 }
 
+const storageDriver = process.env.STORAGE_DRIVER ?? 'local';
+if (!['local', 's3'].includes(storageDriver)) throw new Error('STORAGE_DRIVER must be local or s3');
+const s3Bucket = process.env.S3_BUCKET?.trim();
+const s3Region = process.env.S3_REGION?.trim();
+if (storageDriver === 's3' && (!s3Bucket || !s3Region)) {
+  throw new Error('S3_BUCKET and S3_REGION are required when STORAGE_DRIVER=s3');
+}
+
 export const env = {
+  storageDriver,
+  s3Bucket,
+  s3Region,
   nodeEnv,
   port: num('PORT', 4000),
   databaseUrl: required('DATABASE_URL', 'mysql://root:root@localhost:3306/chameleon'),

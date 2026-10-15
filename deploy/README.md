@@ -1,5 +1,7 @@
 # Backend on Debian EC2 with GitHub Actions and RDS
 
+For persistent originals and conversion outputs, follow the [S3 storage setup](S3-STORAGE.md).
+
 This deployment runs the backend only. RDS must be **MySQL**, matching
 `backend/prisma/schema.prisma`. The frontend stays on its current hosting provider.
 

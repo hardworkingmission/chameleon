@@ -11,6 +11,7 @@ import { sanitizeOriginalName } from '../utils/filename';
 import { normalizeFormat, EXT_TO_MIME } from '../utils/formats';
 import { logger } from '../utils/logger';
 import { ValidationError } from '../utils/errors';
+import { createStorageGroup, storeFiles } from '../services/storage.service';
 
 const RESIZE_FIT_VALUES = new Set(['cover', 'contain', 'fill', 'inside', 'outside']);
 
@@ -51,7 +52,15 @@ export async function convertSingle(req: Request, res: Response, next: NextFunct
   try {
     const resize = parseResize(req.body);
     const inputBuffer = await fs.readFile(file.path);
+    const storageGroup = createStorageGroup();
+    await storeFiles(storageGroup, 'originals', [{ name: originalName, buffer: inputBuffer,
+      contentType: EXT_TO_MIME[detectedFormat] ?? 'application/octet-stream' }]);
     const result = await convertFile(inputBuffer, detectedFormat, targetFormat, { quality, keepMetadata, resize });
+    await storeFiles(storageGroup, 'converted', result.buffers.map((b, i) => ({
+      name: `${baseName(originalName)}${b.suffix || (result.buffers.length > 1 ? `-${i + 1}` : '')}.${targetFormat}`,
+      buffer: b.buffer,
+      contentType: EXT_TO_MIME[targetFormat] ?? 'application/octet-stream',
+    })));
 
     if (req.auth) {
       await recordConversion({
@@ -116,7 +125,15 @@ export async function convertBatch(req: Request, res: Response, next: NextFuncti
           throw new Error('Unsupported or corrupt file');
         }
         const inputBuffer = await fs.readFile(file.path);
+        const storageGroup = createStorageGroup();
+        await storeFiles(storageGroup, 'originals', [{ name: originalName, buffer: inputBuffer,
+          contentType: EXT_TO_MIME[detected] ?? 'application/octet-stream' }]);
         const result = await convertFile(inputBuffer, detected, targetFormat, { quality, keepMetadata, resize });
+        await storeFiles(storageGroup, 'converted', result.buffers.map((b, i) => ({
+          name: `${baseName(originalName)}${b.suffix || (result.buffers.length > 1 ? `-${i + 1}` : '')}.${targetFormat}`,
+          buffer: b.buffer,
+          contentType: EXT_TO_MIME[targetFormat] ?? 'application/octet-stream',
+        })));
 
         result.buffers.forEach((b, i) => {
           zipEntries.push({
@@ -184,7 +201,14 @@ export async function convertImagesToSinglePdf(req: Request, res: Response, next
     if (invalid) throw new Error('One or more files are not supported images');
 
     const resize = parseResize(req.body);
+    const storageGroup = createStorageGroup();
+    await storeFiles(storageGroup, 'originals', images.map((image, i) => ({
+      name: sanitizeOriginalName(files[i].originalname), buffer: image.buffer,
+      contentType: EXT_TO_MIME[image.format] ?? 'application/octet-stream',
+    })));
     const pdfBuffer = await convertImagesToPdf(images, resize);
+    await storeFiles(storageGroup, 'converted', [{ name: 'chameleon-merged.pdf', buffer: pdfBuffer,
+      contentType: 'application/pdf' }]);
 
     if (req.auth) {
       await Promise.all(

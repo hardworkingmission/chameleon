@@ -1,6 +1,23 @@
 // Configuration tests must not pick up secrets from a developer's .env file.
 jest.mock('dotenv', () => ({ config: jest.fn() }));
 
+describe('S3 configuration', () => {
+  const snapshot = { ...process.env };
+  afterEach(() => { process.env = { ...snapshot }; });
+
+  it('requires bucket and region when S3 is enabled', () => {
+    process.env.STORAGE_DRIVER = 's3';
+    delete process.env.S3_BUCKET;
+    delete process.env.S3_REGION;
+    expect(() => jest.isolateModules(() => require('../src/config/env'))).toThrow('S3_BUCKET and S3_REGION');
+  });
+
+  it('rejects a misspelled storage driver', () => {
+    process.env.STORAGE_DRIVER = 'S33';
+    expect(() => jest.isolateModules(() => require('../src/config/env'))).toThrow('STORAGE_DRIVER');
+  });
+});
+
 describe('Production configuration', () => {
   const originalMode = process.env.NODE_ENV;
   const originalSecret = process.env.JWT_SECRET;

@@ -9,6 +9,9 @@ on your own backend — no third-party conversion APIs are called.
 
 ## Architecture
 
+For the backend deployment walkthrough, see [My first CI/CD deployment](deploy/CI-CD-PROCESS.md).
+For detailed AWS setup instructions, see the [deployment guide](deploy/README.md).
+
 ```
 chameleon-app/
   backend/    Express + TypeScript API (Prisma/MySQL, sharp, heic-convert, pdf-lib/pdf-to-img)
@@ -82,9 +85,11 @@ regardless of the host-side port mapping.
 | `JWT_SECRET` | — | Secret used to sign JWTs — set a long random value |
 | `JWT_EXPIRES_IN` | `7d` | JWT lifetime |
 | `UPLOAD_DIR` / `CONVERTED_DIR` | `./storage/...` | Temporary file storage paths |
+| `STORAGE_DRIVER` | `local` | Set to `s3` to retain originals and conversion outputs in S3 |
+| `S3_BUCKET` / `S3_REGION` | unset | Required when S3 storage is enabled |
 | `MAX_FILE_SIZE_MB` | `25` | Max size per uploaded file |
 | `MAX_BATCH_FILES` | `20` | Max files per batch request |
-| `RETENTION_MINUTES` | `60` | Files older than this are deleted by the cleanup job |
+| `RETENTION_MINUTES` | `60` | Local temporary files older than this are deleted; S3 objects are retained |
 | `CLEANUP_INTERVAL_MINUTES` | `15` | How often the cleanup job runs |
 | `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX` | `900000` / `100` | Per-IP rate limit |
 | `ENABLE_GOOGLE_OAUTH`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `false` | See "Enabling OAuth" below |
@@ -131,8 +136,10 @@ Relevant error types: `UnsupportedFormatError` (415), `CorruptFileError` (422),
   the extension or the client-supplied `Content-Type`.
 - Filenames are sanitized before use; files are stored on disk under generated UUIDs.
 - EXIF/metadata is stripped from converted images by default (pass `keepMetadata=true` to preserve it).
-- Uploaded and converted files are deleted immediately after each request finishes, with a
-  cron-based sweep (`RETENTION_MINUTES` / `CLEANUP_INTERVAL_MINUTES`) as a safety net for anything orphaned.
+- Local temporary uploads are deleted after each request, with a cron-based sweep
+  (`RETENTION_MINUTES` / `CLEANUP_INTERVAL_MINUTES`) for orphaned local files.
+  Optional [S3 storage](deploy/S3-STORAGE.md) retains originals and converted outputs
+  until manually deleted; local cleanup does not delete S3 objects.
 - `helmet`, CORS restricted to `CORS_ORIGIN`, and per-IP rate limiting are enabled by default.
 
 ## Enabling OAuth (Google / GitHub)
