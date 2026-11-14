@@ -1,7 +1,8 @@
 # Store originals and converted files in S3
 
-Bucket: `gold-storage-285114430162-us-east-1-an`.
-Region: `us-east-1` (inferred from the name; confirm in the S3 console).
+Bucket: `YOUR_S3_BUCKET`.
+Replace `YOUR_S3_BUCKET` with your private bucket name in the environment and IAM
+policy examples. Set `S3_REGION` to its actual region; `us-east-1` is an example.
 
 ## Enable on EC2
 
@@ -21,7 +22,7 @@ Region: `us-east-1` (inferred from the name; confirm in the S3 console).
 
    ```dotenv
    STORAGE_DRIVER=s3
-   S3_BUCKET=gold-storage-285114430162-us-east-1-an
+   S3_BUCKET=YOUR_S3_BUCKET
    S3_REGION=us-east-1
    ```
 

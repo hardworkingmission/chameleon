@@ -111,6 +111,10 @@ or long-lived AWS access keys stored in GitHub.
 
 ### Configure the GitHub production environment
 
+Deployment is opt-in. After configuring AWS and the production environment, set
+the repository-level Actions variable `ENABLE_AWS_DEPLOY=true`. Without it,
+only CI runs; image publishing and deployment are skipped.
+
 Create a GitHub environment named `production`, restrict its deployment branches
 to `main`, and configure these environment variables:
 
@@ -118,7 +122,7 @@ to `main`, and configure these environment variables:
 | --- | --- |
 | `AWS_DEPLOY_ROLE_ARN` | Required ARN of the GitHub deployment role. |
 | `AWS_REGION` | EC2/ECR region; defaults to `us-east-1`. |
-| `EC2_INSTANCE_ID` | Target instance; the workflow has a project-specific default. |
+| `EC2_INSTANCE_ID` | Required target EC2 instance ID. |
 | `EC2_DOCKER_PLATFORM` | Defaults to `linux/amd64`; use `linux/arm64` for an ARM instance. |
 | `BACKEND_ENV_FILE` | Defaults to `/home/admin/chameleon/backend/.env`. |
 

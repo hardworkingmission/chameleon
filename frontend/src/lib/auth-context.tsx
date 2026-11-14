@@ -22,20 +22,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refreshUser = useCallback(async () => {
-    try {
-      const me = await apiGet('/api/auth/me');
-      setUser({ id: me.id, email: me.email });
-    } catch {
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    refreshUser();
-  }, [refreshUser]);
+    let active = true;
+    apiGet('/api/auth/me')
+      .then((me) => {
+        if (active) setUser({ id: me.id, email: me.email });
+      })
+      .catch(() => {
+        if (active) setUser(null);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await apiPost('/api/auth/login', { email, password });

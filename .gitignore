@@ -13,3 +13,20 @@ backend/storage/converted/*
 # frontend
 frontend/.next/
 frontend/out/
+
+# Local credentials and environment overrides
+.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
+*.p12
+.aws/
+
+# Generated files and publication staging
+__pycache__/
+*.py[cod]
+*.tsbuildinfo
+coverage/
+backend/tests/tmp/
+.public-release/

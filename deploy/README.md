@@ -6,7 +6,7 @@ This deployment runs the backend only. RDS must be **MySQL**, matching
 `backend/prisma/schema.prisma`. The frontend stays on its current hosting provider.
 
 Pull requests run TypeScript checks, all backend tests against a disposable MySQL
-service, and deployment-script checks. A push to `main` runs those checks, builds
+service, and deployment-script checks. With the repository variable `ENABLE_AWS_DEPLOY=true`, a push to `main` runs those checks, builds
 two images, pushes them to ECR, and runs the deployment on EC2 using Systems Manager.
 GitHub authenticates with OIDC; the instance uses its IAM role to pull images.
 No SSH key or long-lived AWS access key is needed in GitHub.
@@ -152,7 +152,7 @@ branches to **main**, and add these environment variables:
 | --- | --- |
 | `AWS_REGION` | Optional override; defaults to `us-east-1`. Must match EC2/ECR. |
 | `AWS_DEPLOY_ROLE_ARN` | `arn:aws:iam::123456789012:role/chameleon-github-deploy` |
-| `EC2_INSTANCE_ID` | Optional override; defaults to `i-007cf303e9600c2ce` |
+| `EC2_INSTANCE_ID` | Required target EC2 instance ID |
 | `BACKEND_ENV_FILE` | Absolute path on EC2; defaults to `/home/admin/chameleon/backend/.env` |
 | `EC2_DOCKER_PLATFORM` | `linux/amd64` for x86_64, `linux/arm64` for Graviton |
 
@@ -163,8 +163,11 @@ the API and migration containers receive their environment from that file.
 If using a custom path for manual Compose commands, export `BACKEND_ENV_FILE`
 and use the same path with `--env-file`. Manual rollback scripts accept that
 path as an optional fifth argument.
-The IAM policy targets `i-007cf303e9600c2ce`; update its instance ARN as well
-if you override `EC2_INSTANCE_ID`.
+Replace `INSTANCE_ID` in the IAM policy with the same instance ID.
+
+Set the **repository-level** Actions variable `ENABLE_AWS_DEPLOY` to `true` only
+after configuring the production environment and IAM trust. Deployment is
+disabled by default for new repositories and forks; CI still runs.
 
 ## 5. Deploy and verify
 

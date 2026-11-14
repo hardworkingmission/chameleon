@@ -14,7 +14,7 @@
     {
       "Effect": "Allow",
       "Action": "ssm:SendCommand",
-      "Resource": ["arn:aws:ssm:REGION::document/AWS-RunShellScript", "arn:aws:ec2:REGION:ACCOUNT_ID:instance/i-007cf303e9600c2ce"]
+      "Resource": ["arn:aws:ssm:REGION::document/AWS-RunShellScript", "arn:aws:ec2:REGION:ACCOUNT_ID:instance/INSTANCE_ID"]
     },
     {
       "Effect": "Allow",

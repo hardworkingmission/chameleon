@@ -7,6 +7,16 @@ on your own backend — no third-party conversion APIs are called.
 - **Apple photos**: HEIC/HEIF → any standard image format
 - **Documents**: PDF → image (one file per page), image(s) → PDF
 
+## Highlights
+
+- Single-file and batch conversions, ZIP downloads, and multi-image PDF merging.
+- Image resizing, quality controls, and optional metadata preservation.
+- Email/password accounts and conversion history, with optional OAuth providers.
+- Local temporary storage or optional private S3 archival.
+- Docker development setup and an opt-in AWS deployment pipeline using OIDC.
+
+Built with **Next.js 16, React 19, TypeScript, Express, Prisma, MySQL, and sharp**.
+
 ## Architecture
 
 For the backend deployment walkthrough, see [My first CI/CD deployment](deploy/CI-CD-PROCESS.md).
@@ -25,7 +35,7 @@ by `convert.service.ts`.
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22 (matches CI)
 - MySQL 8 (or use the Docker Compose setup, which provisions one for you)
 - Docker + Docker Compose (for the containerized setup)
 
@@ -36,7 +46,7 @@ by `convert.service.ts`.
 ```bash
 cd backend
 cp .env.example .env      # edit DATABASE_URL, JWT_SECRET, etc.
-npm install
+npm ci
 npm run prisma:migrate    # creates tables in your MySQL database
 npm run dev                # http://localhost:4000
 ```
@@ -46,7 +56,7 @@ npm run dev                # http://localhost:4000
 ```bash
 cd frontend
 cp .env.example .env       # set NEXT_PUBLIC_API_URL if backend isn't on :4000
-npm install
+npm ci
 npm run dev                 # http://localhost:3000
 ```
 
@@ -123,6 +133,9 @@ pixels (max 8000px each, at least one required to trigger a resize), and `fit`
 (`inside` [default, keeps aspect ratio], `cover`, `contain`, `fill`, or `outside` —
 same semantics as sharp's `resize` fit modes). Resizing applies before format
 encoding for images/HEIC/PDF-to-image, and before embedding for image-to-PDF.
+
+| Endpoint | Auth | Description |
+|---|---|---|
 | `GET /api/history` | JWT | Paginated conversion history (`?page=&pageSize=`) |
 | `GET /api/health` | — | `{ status, dbConnected, uptimeSeconds }` |
 
@@ -175,3 +188,12 @@ it at a disposable test database before running the full suite.
   compiles to CommonJS, so they're loaded through a small `dynamicImport` helper
   (`src/utils/dynamicImport.ts`) that prevents TypeScript from downleveling
   `import()` into a broken `require()` call.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for local checks and pull request guidance.
+For sensitive bug reports, see [SECURITY.md](SECURITY.md).
+
+AWS deployment is disabled by default. Follow the deployment guide before enabling
+`ENABLE_AWS_DEPLOY` as a repository Actions variable. Never commit populated env
+files, cloud credentials, or uploaded user files.

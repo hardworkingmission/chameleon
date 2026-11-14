@@ -67,7 +67,7 @@ jobs:
 
   images:
     needs: test
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: vars.ENABLE_AWS_DEPLOY == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     environment: production
@@ -141,7 +141,7 @@ jobs:
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
       - name: Deploy through Systems Manager and wait for result
         env:
-          EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID || 'i-007cf303e9600c2ce' }}
+          EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
           BACKEND_ENV_FILE: ${{ vars.BACKEND_ENV_FILE || '/home/admin/chameleon/backend/.env' }}
           IMAGE_TAG: ${{ needs.test.outputs.tag }}
         run: python3 deploy/send-deployment.py

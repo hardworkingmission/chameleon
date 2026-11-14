@@ -5,7 +5,7 @@
       "Sid": "StoreChameleonFiles",
       "Effect": "Allow",
       "Action": "s3:PutObject",
-      "Resource": "arn:aws:s3:::gold-storage-285114430162-us-east-1-an/chameleon/*"
+      "Resource": "arn:aws:s3:::YOUR_S3_BUCKET/chameleon/*"
     }
   ]
 }
